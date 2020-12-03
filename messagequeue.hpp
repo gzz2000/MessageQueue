@@ -1,18 +1,30 @@
-#pragma once
+/*
+ * @file messagequeue.hpp
+ * @author Zizheng Guo (https://github.com/gzz2000)
+ * @brief A message queue implementation for inter-thread communication and timeouts.
+ *
+ * Copyright(c) 2020 Zizheng Guo.
+ * Distributed under the MIT License (http://opensource.org/licenses/MIT)
+ *
+ */
+
+#ifndef MESSAGEQUEUE_HPP
+#define MESSAGEQUEUE_HPP
 
 #include <queue>
 #include <mutex>
 #include <condition_variable>
 #include <chrono>
+#include <map>
 
-typedef std::chrono::time_point timer_index;
+typedef std::chrono::time_point<std::chrono::steady_clock> timer_index;
 
 template<typename T>
-class MessageQueue {
+class messagequeue {
     std::queue<T> q;
     mutable std::mutex mutex;
     std::condition_variable cond;
-    std::map<std::chrono::time_point, T> timers;
+    std::map<timer_index, T> timers;
 
 public:
     inline T pop() {
@@ -39,16 +51,16 @@ public:
         cond.notify_one();
     }
 
-    inline std::chrono::time_point setTimeout(const T &msg, int delay /* ms */) {
+    inline timer_index setTimeout(const T &msg, int delay /* ms */) {
         std::lock_guard<std::mutex> lock(mutex);
-        std::chrono::time_point index = std::chrono::steady_clock::now() + std::chrono::milliseconds(delay);
+        timer_index index = std::chrono::steady_clock::now() + std::chrono::milliseconds(delay);
         while(timers.find(index) != timers.end()) index += std::chrono::microseconds(1);
         timers[index] = msg;
         cond.notify_one();   // most to reset the timer
         return index;
     }
 
-    inline void clearTimeout(std::chrono::time_point index) {
+    inline void clearTimeout(timer_index index) {
         std::lock_guard<std::mutex> lock(mutex);
         auto it = timers.find(index);
         if(it != timers.end()) {
@@ -65,3 +77,4 @@ public:
     // inline bool empty() const
 };
 
+#endif // MESSAGEQUEUE_HPP
